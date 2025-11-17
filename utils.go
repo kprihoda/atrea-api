@@ -107,7 +107,7 @@ var ParameterNames = map[string]string{
 	"I00001": "Mode",
 	"I00002": "Temperature",
 	"I00004": "Year",
-	
+
 	// Temperature Readings (I1xxxx series)
 	"I10222": "Indoor Air Temperature",
 	"I10224": "Extract Air Temperature",
@@ -116,7 +116,7 @@ var ParameterNames = map[string]string{
 	"I10275": "Outdoor Air Temperature",
 	"I10281": "Outdoor Air Temperature",
 	"I10282": "Outdoor Air Temperature",
-	
+
 	// Fan Control
 	"I10215": "Fan Speed",
 	"I10230": "Supply Fan Speed",
@@ -124,11 +124,11 @@ var ParameterNames = map[string]string{
 	"I10251": "Supply Air Pressure",
 	"I10262": "Extract Air Pressure",
 	"I10265": "Fan Status",
-	
+
 	// Filter Status
 	"I12015": "Filter Status",
 	"I12020": "Filter Hours",
-	
+
 	// Control Parameters (H10xxx, H11xxx, H12xxx series)
 	"H10715": "Operating Mode",
 	"H11010": "Temperature Setpoint Mode 1",
@@ -136,19 +136,19 @@ var ParameterNames = map[string]string{
 	"H11021": "Desired Temperature",
 	"H11400": "Timezone Offset",
 	"H11406": "System Uptime",
-	
+
 	// Date/Time
 	"H10905": "Year",
 	"H10906": "Month",
 	"H10907": "Day",
-	
+
 	// Network & System
 	"H12200": "Network DHCP",
 	"H12201": "IP Address",
 	"H12202": "Subnet Mask",
 	"H12203": "Gateway",
 	"H12204": "DNS Server",
-	
+
 	// System Commands
 	"C10005": "System Reset",
 	"C10007": "Clear Mode",
@@ -164,37 +164,61 @@ func GetParameterName(id string) string {
 
 // GetCurrentTemperature reads the current room/indoor temperature from the device
 // Primary parameter: I10222 (Indoor Air Temperature) from official RD5 documentation
+// Value encoding: 65036~65535 = -50.0~-0.1°C, 1~1300 = 0.1~130.0°C
 func (d *DeviceData) GetCurrentTemperature() (float64, error) {
-	// Try indoor temperature parameter IDs in priority order
 	tempIDs := []string{"I10222", "I10224", "I10225", "I10249"}
 
 	for _, id := range tempIDs {
 		if val, ok := d.Items[id]; ok {
 			temp, err := strconv.ParseFloat(val, 64)
-			if err == nil && temp > -500 && temp < 10000 { // Raw values are typically 500-3500 (5-35°C)
-				return temp / 100, nil // Device stores temps as integers in hundredths: 2500 = 25.00°C
+			if err == nil {
+				return decodeTemperature(temp), nil
 			}
 		}
 	}
 
-	return 0, nil // Return 0 if no valid temperature found
+	return 0, nil
 }
 
 // GetOutdoorTemperature reads the outdoor air temperature from the device
 // Primary parameter: I10275 (Outdoor Air Temperature) from official RD5 documentation
+// Value encoding: 65036~65535 = -50.0~-0.1°C, 1~1300 = 0.1~130.0°C
 func (d *DeviceData) GetOutdoorTemperature() (float64, error) {
 	tempIDs := []string{"I10275", "I10282", "I10281"}
 
 	for _, id := range tempIDs {
 		if val, ok := d.Items[id]; ok {
 			temp, err := strconv.ParseFloat(val, 64)
-			if err == nil && temp > -500 && temp < 10000 {
-				return temp / 100, nil
+			if err == nil {
+				return decodeTemperature(temp), nil
 			}
 		}
 	}
 
 	return 0, nil
+}
+
+// decodeTemperature converts raw device temperature values to Celsius
+// Encoding: 65036~65535 = -50.0~-0.1°C (two's complement for negatives)
+//
+//	1~1300 = 0.1~130.0°C (positive values / 10)
+func decodeTemperature(rawValue float64) float64 {
+	rawInt := int(rawValue)
+
+	// Negative temperatures (two's complement: 65036-65535)
+	if rawInt >= 65036 {
+		// Convert from two's complement: subtract 65536 to get negative value
+		// Then divide by 10 to get Celsius
+		return float64(rawInt-65536) / 10.0
+	}
+
+	// Positive temperatures (1-1300)
+	if rawInt >= 1 && rawInt <= 1300 {
+		return float64(rawInt) / 10.0
+	}
+
+	// 0 or out of range
+	return 0.0
 }
 
 // GetAllTemperatures returns a map of all temperature-like parameters
