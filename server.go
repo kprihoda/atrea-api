@@ -57,8 +57,6 @@ type Server struct {
 	deviceIP       string
 	devicePassword string
 	client         *WebClient
-	deviceData     *DeviceData
-	lastUpdate     time.Time
 	mutex          sync.RWMutex
 }
 
@@ -71,52 +69,30 @@ func NewServer(ip string, password string) *Server {
 	}
 }
 
-// Authenticate with the device
+// Authenticate with the device (only caches the session ID)
 func (s *Server) authenticate() error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	sessionID, err := s.client.Login(s.devicePassword)
 	if err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 
-	// Get initial data
-	data, err := s.client.GetData()
-	if err != nil {
-		return fmt.Errorf("failed to get initial data: %w", err)
-	}
-
-	deviceData, err := ParseXMLData(data)
-	if err != nil {
-		return fmt.Errorf("failed to parse data: %w", err)
-	}
-
-	s.deviceData = deviceData
-	s.lastUpdate = time.Now()
-
-	log.Printf("✓ Authenticated with device (session: %s, %d parameters)", sessionID, len(deviceData.Items))
+	log.Printf("✓ Authenticated with device (session: %s)", sessionID)
 	return nil
 }
 
-// RefreshData updates device data
-func (s *Server) refreshData() error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
+// FetchDeviceData fetches fresh data from the device
+func (s *Server) fetchDeviceData() (*DeviceData, error) {
 	data, err := s.client.GetData()
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to get data: %w", err)
 	}
 
 	deviceData, err := ParseXMLData(data)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to parse data: %w", err)
 	}
 
-	s.deviceData = deviceData
-	s.lastUpdate = time.Now()
-	return nil
+	return deviceData, nil
 }
 
 // HTTP Handlers
@@ -148,28 +124,27 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	if s.deviceData == nil {
+	// Fetch fresh data from device
+	deviceData, err := s.fetchDeviceData()
+	if err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{
 			Success: false,
-			Error:   "Device not initialized",
+			Error:   fmt.Sprintf("Failed to fetch device data: %v", err),
 		})
 		return
 	}
 
-	indoorTemp, _ := s.deviceData.GetCurrentTemperature()
-	outdoorTemp, _ := s.deviceData.GetOutdoorTemperature()
+	indoorTemp, _ := deviceData.GetCurrentTemperature()
+	outdoorTemp, _ := deviceData.GetOutdoorTemperature()
 
 	status := StatusResponse{
 		Device:          "Atrea RD5",
 		IP:              s.deviceIP,
 		IsAuthenticated: s.client.IsAuthenticated(),
 		SessionID:       s.client.GetSessionID(),
-		ParameterCount:  len(s.deviceData.Items),
-		LastUpdate:      s.lastUpdate,
+		ParameterCount:  len(deviceData.Items),
+		LastUpdate:      time.Now(),
 		IndoorTemp:      indoorTemp,
 		OutdoorTemp:     outdoorTemp,
 	}
@@ -190,20 +165,19 @@ func (s *Server) handleTemperature(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	if s.deviceData == nil {
+	// Fetch fresh data from device
+	deviceData, err := s.fetchDeviceData()
+	if err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{
 			Success: false,
-			Error:   "Device not initialized",
+			Error:   fmt.Sprintf("Failed to fetch device data: %v", err),
 		})
 		return
 	}
 
-	indoor, errIn := s.deviceData.GetCurrentTemperature()
-	outdoor, errOut := s.deviceData.GetOutdoorTemperature()
+	indoor, errIn := deviceData.GetCurrentTemperature()
+	outdoor, errOut := deviceData.GetOutdoorTemperature()
 
 	if errIn != nil || errOut != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -217,7 +191,7 @@ func (s *Server) handleTemperature(w http.ResponseWriter, r *http.Request) {
 	temps := TemperatureResponse{
 		Indoor:    indoor,
 		Outdoor:   outdoor,
-		Timestamp: s.lastUpdate,
+		Timestamp: time.Now(),
 	}
 
 	response := APIResponse{
@@ -236,14 +210,13 @@ func (s *Server) handleParameters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	if s.deviceData == nil {
+	// Fetch fresh data from device
+	deviceData, err := s.fetchDeviceData()
+	if err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{
 			Success: false,
-			Error:   "Device not initialized",
+			Error:   fmt.Sprintf("Failed to fetch device data: %v", err),
 		})
 		return
 	}
@@ -257,7 +230,7 @@ func (s *Server) handleParameters(w http.ResponseWriter, r *http.Request) {
 
 	var params []ParameterResponse
 	count := 0
-	for id, value := range s.deviceData.Items {
+	for id, value := range deviceData.Items {
 		name := GetParameterName(id)
 		params = append(params, ParameterResponse{
 			ID:    id,
@@ -299,70 +272,41 @@ func (s *Server) handleParameter(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(APIResponse{
 			Success: false,
-			Error:   "Missing parameter ID",
-		})
-		return
-	}
-
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	if s.deviceData == nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(APIResponse{
-			Success: false,
-			Error:   "Device not initialized",
-		})
-		return
-	}
-
-	value, ok := s.deviceData.Items[paramID]
-	if !ok {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(APIResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Parameter %s not found", paramID),
-		})
-		return
-	}
-
-	param := ParameterResponse{
-		ID:    paramID,
-		Name:  GetParameterName(paramID),
-		Value: value,
-	}
-
-	response := APIResponse{
-		Success: true,
-		Data:    param,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+		Error:   "Missing parameter ID",
+	})
+	return
 }
 
-// POST /refresh - Refresh device data
-func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+// Fetch fresh data from device
+deviceData, err := s.fetchDeviceData()
+if err != nil {
+	w.WriteHeader(http.StatusServiceUnavailable)
+	json.NewEncoder(w).Encode(APIResponse{
+		Success: false,
+		Error:   fmt.Sprintf("Failed to fetch device data: %v", err),
+	})
+	return
+}
 
-	if err := s.refreshData(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(APIResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to refresh data: %v", err),
-		})
-		return
-	}
+value, ok := deviceData.Items[paramID]
+if !ok {
+	w.WriteHeader(http.StatusNotFound)
+	json.NewEncoder(w).Encode(APIResponse{
+		Success: false,
+		Error:   fmt.Sprintf("Parameter %s not found", paramID),
+	})
+	return
+}
 
-	response := APIResponse{
+param := ParameterResponse{
+	ID:    paramID,
+	Name:  GetParameterName(paramID),
+	Value: value,
+}
+
+response := APIResponse{
 		Success: true,
-		Message: "Device data refreshed",
-		Data: map[string]interface{}{
-			"timestamp": time.Now(),
-		},
+		Data:    param,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -411,7 +355,6 @@ func (s *Server) StartServer(port int) error {
 	http.HandleFunc("/temperature", s.withMiddleware(s.handleTemperature))
 	http.HandleFunc("/parameters", s.withMiddleware(s.handleParameters))
 	http.HandleFunc("/parameter/", s.withMiddleware(s.handleParameter))
-	http.HandleFunc("/refresh", s.withMiddleware(s.handleRefresh))
 
 	addr := fmt.Sprintf(":%d", port)
 	log.Printf("🚀 Starting web server on %s", addr)
@@ -421,7 +364,6 @@ func (s *Server) StartServer(port int) error {
 	log.Printf("  GET  /temperature        - Current temperatures (indoor/outdoor)")
 	log.Printf("  GET  /parameters         - List all parameters (?limit=10 to limit)")
 	log.Printf("  GET  /parameter/:id      - Get specific parameter (e.g. /parameter/I10215)")
-	log.Printf("  POST /refresh            - Refresh device data")
 
 	return http.ListenAndServe(addr, nil)
 }
