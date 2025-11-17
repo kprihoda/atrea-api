@@ -118,6 +118,63 @@ func GetParameterName(id string) string {
 	return id
 }
 
+// GetCurrentTemperature reads the current room/indoor temperature from the device
+// Typical parameter: I10222 (indoor air temperature) or similar I1xxxx parameters
+func (d *DeviceData) GetCurrentTemperature() (float64, error) {
+	// Try common indoor temperature parameter IDs
+	tempIDs := []string{"I10222", "I10224", "I10225", "I10249"}
+	
+	for _, id := range tempIDs {
+		if val, ok := d.Items[id]; ok {
+			temp, err := strconv.ParseFloat(val, 64)
+			if err == nil && temp > -500 && temp < 10000 { // Raw values are typically 500-3500 (5-35°C)
+				return temp / 100, nil // Device stores temps as integers in hundredths: 2500 = 25.00°C
+			}
+		}
+	}
+	
+	return 0, nil // Return 0 if no valid temperature found
+}
+
+// GetOutdoorTemperature reads the outdoor air temperature from the device
+// Typical parameter: I10282 or similar
+func (d *DeviceData) GetOutdoorTemperature() (float64, error) {
+	tempIDs := []string{"I10282", "I10281", "I10275"}
+	
+	for _, id := range tempIDs {
+		if val, ok := d.Items[id]; ok {
+			temp, err := strconv.ParseFloat(val, 64)
+			if err == nil && temp > -500 && temp < 10000 {
+				return temp / 100, nil
+			}
+		}
+	}
+	
+	return 0, nil
+}
+
+// GetAllTemperatures returns a map of all temperature-like parameters
+func (d *DeviceData) GetAllTemperatures() map[string]float64 {
+	temps := make(map[string]float64)
+	
+	for id, val := range d.Items {
+		// Temperature parameters typically start with I1 and are 5 digits
+		if strings.HasPrefix(id, "I1") && len(id) == 6 {
+			if temp, err := strconv.ParseFloat(val, 64); err == nil {
+				// Convert from device format (raw value / 100) to Celsius
+				tempCelsius := temp / 100
+				// Only include reasonable temperatures
+				if tempCelsius > -50 && tempCelsius < 100 {
+					name := GetParameterName(id)
+					temps[name] = tempCelsius
+				}
+			}
+		}
+	}
+	
+	return temps
+}
+
 // CommonParameters defines common device parameters
 type CommonParameters struct {
 	// Operating mode

@@ -58,7 +58,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	fmt.Println("=== Atrea RD5 Web API Client ===\n")
+	fmt.Println("=== Atrea RD5 Web API Client ===")
 
 	// Create web client
 	webClient := NewWebClient(atreaIP)
@@ -105,6 +105,15 @@ func main() {
 			fmt.Printf("  %s (%s) = %s\n", key, name, val)
 			count++
 		}
+	}
+
+	// Display current temperatures
+	fmt.Println("\nCurrent Temperatures:")
+	if indoor, err := deviceData.GetCurrentTemperature(); err == nil && indoor > 0 {
+		fmt.Printf("  Indoor: %.1f°C\n", indoor)
+	}
+	if outdoor, err := deviceData.GetOutdoorTemperature(); err == nil && outdoor > -50 {
+		fmt.Printf("  Outdoor: %.1f°C\n", outdoor)
 	}
 
 	// Try to get alarms

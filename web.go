@@ -72,22 +72,29 @@ func (wc *WebClient) Login(password string) (string, error) {
 	responseStr := strings.TrimSpace(string(body))
 
 	// STEP 4: Extract session ID from XML response
-	// Response format: <?xml version="1.0" encoding="UTF-8"?><root lng="0">XXXXX</root>
-	// Extract content between <root...> and </root>
-	startIdx := strings.Index(responseStr, ">")
-	endIdx := strings.LastIndex(responseStr, "<")
-
-	if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
-		sessionID := strings.TrimSpace(responseStr[startIdx+1 : endIdx])
-
-		// Validate session ID is a valid 5-digit number (not "denied" or "0")
-		if sessionID != "" && sessionID != "0" && sessionID != "denied" {
-			wc.auth = sessionID
-			return sessionID, nil
+	// Response format expected:
+	//   <?xml version="1.0" encoding="UTF-8"?><root lng="0">XXXXX</root>
+	// Robustly locate the content inside the <root> element.
+	if rootStart := strings.Index(responseStr, "<root"); rootStart != -1 {
+		// find the '>' that closes the opening <root ...> tag
+		if gt := strings.Index(responseStr[rootStart:], ">"); gt != -1 {
+			start := rootStart + gt + 1
+			if endTag := strings.Index(responseStr, "</root>"); endTag != -1 && start < endTag {
+				sessionID := strings.TrimSpace(responseStr[start:endTag])
+				// Validate: must not be empty, "0", or "denied"; must be numeric
+				if sessionID != "" && sessionID != "0" && sessionID != "denied" {
+					if _, err := strconv.Atoi(sessionID); err == nil {
+						wc.auth = sessionID
+						return sessionID, nil
+					}
+				}
+			}
 		}
 	}
 
+	// If we got here, either parsing failed or response was "denied"
 	return "", fmt.Errorf("authentication failed: invalid response from device")
+
 } // GetData retrieves the XML configuration data from the device
 func (wc *WebClient) GetData() (string, error) {
 	params := url.Values{}
