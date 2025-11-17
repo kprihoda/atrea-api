@@ -56,9 +56,9 @@ func TestParseXMLDataBasic(t *testing.T) {
 	}
 
 	tests := []struct {
-		paramID      string
-		expectedVal  string
-		description  string
+		paramID     string
+		expectedVal string
+		description string
 	}{
 		{"I10215", "201", "indoor temperature"},
 		{"I10211", "36", "outdoor temperature"},
@@ -110,7 +110,7 @@ func TestDecodeTemperatureNegative(t *testing.T) {
 		description string
 	}{
 		{65526, -1.0, "-1°C"},
-		{65536, 0.0, "zero (boundary)"},  // 65536 mod 65536 = 0
+		{65536, 0.0, "zero (boundary)"}, // 65536 mod 65536 = 0
 		{65036, -50.0, "-50°C minimum"},
 		{65535, -0.1, "-0.1°C near zero"},
 		{65496, -4.0, "-4°C"},
@@ -127,9 +127,9 @@ func TestDecodeTemperatureNegative(t *testing.T) {
 // TestDecodeTemperatureEdgeCases tests edge cases and boundary conditions
 func TestDecodeTemperatureEdgeCases(t *testing.T) {
 	tests := []struct {
-		rawValue    float64
+		rawValue      float64
 		shouldBeValid bool
-		description string
+		description   string
 	}{
 		{0, true, "zero (out of range, returns as-is)"},
 		{1300, true, "1300 (positive max)"},
