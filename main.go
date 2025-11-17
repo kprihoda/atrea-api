@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -53,6 +54,16 @@ func loadConfig() error {
 }
 
 func main() {
+	// Check for --capture flag
+	captureFlag := flag.Bool("capture", false, "Capture real device responses and save to testdata/")
+	flag.Parse()
+
+	if *captureFlag {
+		if err := CaptureTestData(); err != nil {
+			log.Fatalf("Error capturing test data: %v", err)
+		}
+		os.Exit(0)
+	}
 	// Load configuration from config.env
 	if err := loadConfig(); err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
