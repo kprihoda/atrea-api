@@ -82,6 +82,9 @@ func (s *Server) authenticate() error {
 
 // FetchDeviceData fetches fresh data from the device
 func (s *Server) fetchDeviceData() (*DeviceData, error) {
+	log.Printf("→ Fetching fresh data from device...")
+	startTime := time.Now()
+	
 	data, err := s.client.GetData()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get data: %w", err)
@@ -92,6 +95,8 @@ func (s *Server) fetchDeviceData() (*DeviceData, error) {
 		return nil, fmt.Errorf("failed to parse data: %w", err)
 	}
 
+	elapsed := time.Since(startTime)
+	log.Printf("✓ Data fetched successfully (%d parameters, %.2fs)", len(deviceData.Items), elapsed.Seconds())
 	return deviceData, nil
 }
 
@@ -272,39 +277,39 @@ func (s *Server) handleParameter(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(APIResponse{
 			Success: false,
-		Error:   "Missing parameter ID",
-	})
-	return
-}
+			Error:   "Missing parameter ID",
+		})
+		return
+	}
 
-// Fetch fresh data from device
-deviceData, err := s.fetchDeviceData()
-if err != nil {
-	w.WriteHeader(http.StatusServiceUnavailable)
-	json.NewEncoder(w).Encode(APIResponse{
-		Success: false,
-		Error:   fmt.Sprintf("Failed to fetch device data: %v", err),
-	})
-	return
-}
+	// Fetch fresh data from device
+	deviceData, err := s.fetchDeviceData()
+	if err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Failed to fetch device data: %v", err),
+		})
+		return
+	}
 
-value, ok := deviceData.Items[paramID]
-if !ok {
-	w.WriteHeader(http.StatusNotFound)
-	json.NewEncoder(w).Encode(APIResponse{
-		Success: false,
-		Error:   fmt.Sprintf("Parameter %s not found", paramID),
-	})
-	return
-}
+	value, ok := deviceData.Items[paramID]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(APIResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Parameter %s not found", paramID),
+		})
+		return
+	}
 
-param := ParameterResponse{
-	ID:    paramID,
-	Name:  GetParameterName(paramID),
-	Value: value,
-}
+	param := ParameterResponse{
+		ID:    paramID,
+		Name:  GetParameterName(paramID),
+		Value: value,
+	}
 
-response := APIResponse{
+	response := APIResponse{
 		Success: true,
 		Data:    param,
 	}
