@@ -100,14 +100,58 @@ func (d *DeviceData) GetFloatValue(key string) (float64, error) {
 }
 
 // ParameterNames maps device parameter IDs to human-readable names
+// Based on Atrea RD5 official parameter documentation
 var ParameterNames = map[string]string{
+	// System Status & Mode
 	"I00000": "System Status",
 	"I00001": "Mode",
 	"I00002": "Temperature",
-	"I10215": "Fan Speed",
-	"I10249": "Supply Air Temperature",
+	"I00004": "Year",
+	
+	// Temperature Readings (I1xxxx series)
+	"I10222": "Indoor Air Temperature",
+	"I10224": "Extract Air Temperature",
 	"I10225": "Extract Air Temperature",
+	"I10249": "Supply Air Temperature",
+	"I10275": "Outdoor Air Temperature",
+	"I10281": "Outdoor Air Temperature",
+	"I10282": "Outdoor Air Temperature",
+	
+	// Fan Control
+	"I10215": "Fan Speed",
+	"I10230": "Supply Fan Speed",
+	"I10244": "Extract Fan Speed",
+	"I10251": "Supply Air Pressure",
+	"I10262": "Extract Air Pressure",
+	"I10265": "Fan Status",
+	
+	// Filter Status
 	"I12015": "Filter Status",
+	"I12020": "Filter Hours",
+	
+	// Control Parameters (H10xxx, H11xxx, H12xxx series)
+	"H10715": "Operating Mode",
+	"H11010": "Temperature Setpoint Mode 1",
+	"H11017": "Temperature Control Mode",
+	"H11021": "Desired Temperature",
+	"H11400": "Timezone Offset",
+	"H11406": "System Uptime",
+	
+	// Date/Time
+	"H10905": "Year",
+	"H10906": "Month",
+	"H10907": "Day",
+	
+	// Network & System
+	"H12200": "Network DHCP",
+	"H12201": "IP Address",
+	"H12202": "Subnet Mask",
+	"H12203": "Gateway",
+	"H12204": "DNS Server",
+	
+	// System Commands
+	"C10005": "System Reset",
+	"C10007": "Clear Mode",
 }
 
 // GetParameterName returns the human-readable name for a parameter ID
@@ -119,11 +163,11 @@ func GetParameterName(id string) string {
 }
 
 // GetCurrentTemperature reads the current room/indoor temperature from the device
-// Typical parameter: I10222 (indoor air temperature) or similar I1xxxx parameters
+// Primary parameter: I10222 (Indoor Air Temperature) from official RD5 documentation
 func (d *DeviceData) GetCurrentTemperature() (float64, error) {
-	// Try common indoor temperature parameter IDs
+	// Try indoor temperature parameter IDs in priority order
 	tempIDs := []string{"I10222", "I10224", "I10225", "I10249"}
-	
+
 	for _, id := range tempIDs {
 		if val, ok := d.Items[id]; ok {
 			temp, err := strconv.ParseFloat(val, 64)
@@ -132,15 +176,15 @@ func (d *DeviceData) GetCurrentTemperature() (float64, error) {
 			}
 		}
 	}
-	
+
 	return 0, nil // Return 0 if no valid temperature found
 }
 
 // GetOutdoorTemperature reads the outdoor air temperature from the device
-// Typical parameter: I10282 or similar
+// Primary parameter: I10275 (Outdoor Air Temperature) from official RD5 documentation
 func (d *DeviceData) GetOutdoorTemperature() (float64, error) {
-	tempIDs := []string{"I10282", "I10281", "I10275"}
-	
+	tempIDs := []string{"I10275", "I10282", "I10281"}
+
 	for _, id := range tempIDs {
 		if val, ok := d.Items[id]; ok {
 			temp, err := strconv.ParseFloat(val, 64)
@@ -149,14 +193,14 @@ func (d *DeviceData) GetOutdoorTemperature() (float64, error) {
 			}
 		}
 	}
-	
+
 	return 0, nil
 }
 
 // GetAllTemperatures returns a map of all temperature-like parameters
 func (d *DeviceData) GetAllTemperatures() map[string]float64 {
 	temps := make(map[string]float64)
-	
+
 	for id, val := range d.Items {
 		// Temperature parameters typically start with I1 and are 5 digits
 		if strings.HasPrefix(id, "I1") && len(id) == 6 {
@@ -171,7 +215,7 @@ func (d *DeviceData) GetAllTemperatures() map[string]float64 {
 			}
 		}
 	}
-	
+
 	return temps
 }
 
