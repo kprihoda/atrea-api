@@ -1,4 +1,4 @@
-package main
+ package main
 
 import (
 	"encoding/xml"
@@ -109,16 +109,20 @@ var ParameterNames = map[string]string{
 	"I00004": "Year",
 
 	// Temperature Readings (I1xxxx series)
-	"I10222": "Indoor Air Temperature",
-	"I10224": "Extract Air Temperature",
-	"I10225": "Extract Air Temperature",
-	"I10249": "Supply Air Temperature",
-	"I10275": "Outdoor Air Temperature",
-	"I10281": "Outdoor Air Temperature",
-	"I10282": "Outdoor Air Temperature",
+	"I10211": "Outdoor Air Temperature (T-ODA)",
+	"I10212": "Supply Air Temperature (T-SUP)",
+	"I10213": "Extract Air Temperature (T-ETA)",
+	"I10214": "Exhaust Air Temperature (T-EHA)",
+	"I10215": "Indoor Air Temperature (T-IDA)",
+	"I10222": "Indoor Air Temperature (alt)",
+	"I10224": "Extract Air Temperature (alt)",
+	"I10225": "Extract Air Temperature (alt)",
+	"I10249": "Supply Air Temperature (alt)",
+	"I10275": "Outdoor Air Temperature (alt)",
+	"I10281": "Outdoor Air Temperature (alt)",
+	"I10282": "Outdoor Air Temperature (alt)",
 
 	// Fan Control
-	"I10215": "Fan Speed",
 	"I10230": "Supply Fan Speed",
 	"I10244": "Extract Fan Speed",
 	"I10251": "Supply Air Pressure",
@@ -163,10 +167,10 @@ func GetParameterName(id string) string {
 }
 
 // GetCurrentTemperature reads the current room/indoor temperature from the device
-// Primary parameter: I10222 (Indoor Air Temperature) from official RD5 documentation
+// Parameter: I10215 (T-IDA - Teplota vnitřního vzduchu) from official RD5 documentation
 // Value encoding: 65036~65535 = -50.0~-0.1°C, 1~1300 = 0.1~130.0°C
 func (d *DeviceData) GetCurrentTemperature() (float64, error) {
-	tempIDs := []string{"I10222", "I10224", "I10225", "I10249"}
+	tempIDs := []string{"I10215", "I10222", "I10224", "I10225", "I10249"}
 
 	for _, id := range tempIDs {
 		if val, ok := d.Items[id]; ok {
@@ -181,10 +185,10 @@ func (d *DeviceData) GetCurrentTemperature() (float64, error) {
 }
 
 // GetOutdoorTemperature reads the outdoor air temperature from the device
-// Primary parameter: I10275 (Outdoor Air Temperature) from official RD5 documentation
+// Parameter: I10211 (T-ODA - Teplota venkovního vzduchu) from official RD5 documentation
 // Value encoding: 65036~65535 = -50.0~-0.1°C, 1~1300 = 0.1~130.0°C
 func (d *DeviceData) GetOutdoorTemperature() (float64, error) {
-	tempIDs := []string{"I10275", "I10282", "I10281"}
+	tempIDs := []string{"I10211", "I10275", "I10282", "I10281"}
 
 	for _, id := range tempIDs {
 		if val, ok := d.Items[id]; ok {
