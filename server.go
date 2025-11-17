@@ -84,7 +84,7 @@ func (s *Server) authenticate() error {
 func (s *Server) fetchDeviceData() (*DeviceData, error) {
 	log.Printf("→ Fetching fresh data from device...")
 	startTime := time.Now()
-	
+
 	data, err := s.client.GetData()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get data: %w", err)
